@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from rag import answer_question
 import uuid
 import os
-import pyttsx3   # simple offline TTS (can replace later with better TTS)
+import pyttsx3 
 
 print("API loaded")
 load_dotenv()
@@ -19,7 +19,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # allow frontend to call backend
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
