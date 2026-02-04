@@ -1,5 +1,4 @@
 from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
 from google import genai
 from dotenv import load_dotenv
 import os
@@ -14,27 +13,36 @@ qdrant = QdrantClient(
     timeout=60
 )
 
-# ---------- Embedding ----------
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
+COLLECTION_NAME = "ambedkar_rag"
+
+# ---------- Lazy Embedder ----------
+_embedder = None
+
+def get_embedder():
+    global _embedder
+    if _embedder is None:
+        from sentence_transformers import SentenceTransformer
+        import torch
+        torch.set_num_threads(1)
+        _embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    return _embedder
 
 # ---------- Gemini ----------
 gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-COLLECTION_NAME = "ambedkar_rag"
-
 # ---------- Retrieve ----------
 def retrieve(query: str, top_k: int = 3):
+    embedder = get_embedder()
     vector = embedder.encode(query).tolist()
 
     results = qdrant.query_points(
         collection_name=COLLECTION_NAME,
-        prefetch=[],               # REQUIRED in v1.16
-        query=vector,              # VECTOR GOES HERE
+        prefetch=[],          # REQUIRED in qdrant-client >=1.16
+        query=vector,
         limit=top_k,
         with_payload=True
     )
 
-    # v1.16 returns object with .points
     return [point.payload for point in results.points]
 
 # ---------- Answer ----------

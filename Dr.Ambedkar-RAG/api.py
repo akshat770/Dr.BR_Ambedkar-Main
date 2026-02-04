@@ -11,10 +11,6 @@ import requests
 print("API loaded")
 load_dotenv()
 
-print("ELEVEN KEY VALUE:", os.getenv("ELEVENLABS_API_KEY"))
-print("ELEVEN KEY LENGTH:", len(os.getenv("ELEVENLABS_API_KEY") or ""))
-
-
 # ===================== APP =====================
 app = FastAPI(
     title="Dr. Ambedkar RAG API",
@@ -85,5 +81,5 @@ def ask(query: Query):
     return {
         "question": query.question,
         "answer": answer,
-        "audio_url": f"http://127.0.0.1:8000/audio/{audio_filename}"
+        "audio_url": f"/audio/{audio_filename}"
     }
