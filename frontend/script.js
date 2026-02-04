@@ -7,38 +7,67 @@ import { OrbitControls } from "https://unpkg.com/three@0.158.0/examples/jsm/cont
 
 let mixer;
 let talkingAction;
+let isTalking = false;
+let currentAudio = null;
+
 const clock = new THREE.Clock();
 
 /* ========================== RAG QUESTION FUNCTION ========================== */
 window.askQuestion = async function () {
   const question = document.getElementById("question").value;
   if (!question) return;
+
   const answerDiv = document.getElementById("answer");
   answerDiv.innerText = "Thinking...";
+
   try {
-    const response = await fetch("http://127.0.0.1:8000/ask",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question })
-      });
+    const response = await fetch("http://127.0.0.1:8000/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question })
+    });
+
     const data = await response.json();
     answerDiv.innerText = data.answer || "No answer returned";
+
     if (data.audio_url) {
+
+      // stop previous audio if any
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio = null;
+      }
+
       const audio = new Audio(data.audio_url);
+      currentAudio = audio;
+
       audio.onplay = () => {
+        isTalking = true;
+
         if (talkingAction) {
           talkingAction.reset();
-          talkingAction.play(); //START TALKING
+          talkingAction.setEffectiveTimeScale(1);
+          talkingAction.play();
         }
       };
+
       audio.onended = () => {
+        isTalking = false;
+
         if (talkingAction) {
-          talkingAction.stop(); // STOP TALKING 
+          talkingAction.stop();
+          talkingAction.reset(); // go back to rest pose
         }
       };
+
+      audio.onerror = () => {
+        isTalking = false;
+        if (talkingAction) talkingAction.stop();
+      };
+
       audio.play();
     }
+
   } catch (err) {
     console.error(err);
     answerDiv.innerText = "Backend error";
@@ -95,22 +124,16 @@ loader.setDRACOLoader(dracoLoader);
 loader.load("./models/Dr_ambedkar2.glb", (gltf) => {
   model = gltf.scene;
 
-  // Scale up
   model.scale.set(0.25, 0.25, 0.25);
-
-  // Face camera
   model.rotation.y = Math.PI / 2;
 
-
-
-  // Center model
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
 
   model.position.x -= center.x;
   model.position.z -= center.z;
-  model.position.y -= box.min.y; // feet on ground
+  model.position.y -= box.min.y;
 
   scene.add(model);
 
@@ -119,15 +142,20 @@ loader.load("./models/Dr_ambedkar2.glb", (gltf) => {
   ========================== */
   if (gltf.animations.length) {
     mixer = new THREE.AnimationMixer(model);
-    const talkingClip = gltf.animations.find(c => c.name.includes("Anim.001"));
+
+    const talkingClip = gltf.animations.find(c =>
+      c.name.toLowerCase().includes("anim")
+    );
+
     if (talkingClip) {
       talkingAction = mixer.clipAction(talkingClip);
       talkingAction.loop = THREE.LoopRepeat;
+      talkingAction.clampWhenFinished = true;
+      talkingAction.enabled = true;
       talkingAction.stop();
     }
   }
 
-  // Camera framing (FIXED)
   const fov = camera.fov * (Math.PI / 180);
   const distance = size.y / (2 * Math.tan(fov / 2));
 
@@ -141,7 +169,19 @@ loader.load("./models/Dr_ambedkar2.glb", (gltf) => {
 ========================== */
 function animate() {
   requestAnimationFrame(animate);
-  if (mixer) mixer.update(clock.getDelta());
+
+  const delta = clock.getDelta();
+
+  if (mixer) {
+    // Slight speed variation while talking → feels like speech
+    if (isTalking && talkingAction) {
+      talkingAction.setEffectiveTimeScale(
+        0.9 + Math.sin(performance.now() * 0.005) * 0.15
+      );
+    }
+    mixer.update(delta);
+  }
+
   renderer.render(scene, camera);
 }
 animate();
